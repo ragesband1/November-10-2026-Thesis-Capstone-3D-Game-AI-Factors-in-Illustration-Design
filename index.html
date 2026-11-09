@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thesis Capstone 3D Game: AI Factors in Illustration & Design</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f172a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #ffffff;
+            z-index: 10;
+            pointer-events: none;
+        }
+        h1 {
+            font-size: 22px;
+            margin: 0 0 5px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+            color: #38bdf8;
+        }
+        p {
+            margin: 0 0 5px 0;
+            font-size: 14px;
+            color: #94a3b8;
+        }
+        .stat-box {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #334155;
+            padding: 12px 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+        #instructions {
+            position: absolute;
+            bottom: 30px;
+            width: 100%;
+            text-align: center;
+            color: #cbd5e1;
+            z-index: 10;
+            font-size: 15px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 23, 42, 0.95);
+            border: 2px solid #38bdf8;
+            padding: 30px 50px;
+            border-radius: 16px;
+            text-align: center;
+            color: white;
+            z-index: 20;
+            display: none;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+        }
+        #game-over h2 {
+            color: #38bdf8;
+            margin-top: 0;
+        }
+        button {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #0369a1;
+        }
+    </style>
+    <!-- Include Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="stat-box">
+            <h1>AI Design Factors: Thesis Runner</h1>
+            <p><strong>Thesis Score (Variables Collected):</strong> <span id="score">0</span> / 24</p>
+            <p>Controls: Use <strong>A / D</strong> or <strong>Left / Right Arrow Keys</strong> to dodge risks & collect AI advantages!</p>
+        </div>
+    </div>
+
+    <div id="instructions">Collect <strong>Perceived Usefulness (+1)</strong> & <strong>Creative Efficiency (+1)</strong>! Avoid <strong>Skill Loss / Over-reliance (-1 Life)</strong>!</div>
+
+    <div id="game-over">
+        <h2 id="go-title">Defense Complete!</h2>
+        <p id="go-message">You successfully defended your thesis game model.</p>
+        <button onclick="restartGame()">Restart Simulation</button>
+    </div>
+
+    <script>
+        // Game State & Setup
+        let scene, camera, renderer;
+        let player;
+        let objects = [];
+        let score = 0;
+        let lives = 3;
+        let gameActive = true;
+        let gameSpeed = 0.35;
+        let spawnTimer = 0;
+        
+        const lanes = [-3, 0, 3];
+        let currentLane = 1; // Start in middle lane (index 1)
+
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a);
+            scene.fog = new THREE.FogExp2(0x0f172a, 0.035);
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
+            camera.lookAt(0, 0, -5);
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0x38bdf8, 1);
+            directionalLight.position.set(10, 20, 10);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            // Create Grid / Floor
+            const gridHelper = new THREE.GridHelper(100, 50, 0x38bdf8, 0x1e293b);
+            gridHelper.position.z = -25;
+            scene.add(gridHelper);
+
+            // Create Player (Student Multimedia Artist Avatar)
+            const playerGeometry = new THREE.BoxGeometry(0.8, 1.2, 0.8);
+            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.3 });
+            player = new THREE.Mesh(playerGeometry, playerMaterial);
+            player.position.set(lanes[currentLane], 0.6, 0);
+            player.castShadow = true;
+            scene.add(player);
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize, false);
+            window.addEventListener('keydown', handleKeyDown);
+
+            // Start Game Loop
+            animate();
+        }
+
+        // Input Handler for Lane Switching
+        function handleKeyDown(e) {
+            if (!gameActive) return;
+            if ((e.key === 'ArrowLeft' || e.key === 'a') && currentLane > 0) {
+                currentLane--;
+            }
+            if ((e.key === 'ArrowRight' || e.key === 'd') && currentLane < 2) {
+                currentLane++;
+            }
+        }
+
+        // Spawn Research Variables (Positive Factors) & Risks (Negative Obstacles)
+        function spawnObject() {
+            const laneIndex = Math.floor(Math.random() * 3);
+            const isPositive = Math.random() > 0.3; // 70% positive factors, 30% risks
+
+            let geometry, material, meshType;
+            if (isPositive) {
+                geometry = new THREE.OctahedronGeometry(0.5); // Positive Factor (e.g., Usefulness)
+                material = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.2, emissive: 0x059669 });
+                meshType = 'good';
+            } else {
+                geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8); // Risk (e.g., Skill Atrophy)
+                material = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4, emissive: 0xb91c1c });
+                meshType = 'bad';
+            }
+
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(lanes[laneIndex], 0.5, -50);
+            mesh.userData = { type: meshType, lane: laneIndex };
+            mesh.castShadow = true;
+
+            scene.add(mesh);
+            objects.push(mesh);
+        }
+
+        // Game Loop
+        function animate() {
+            if (!gameActive) return;
+
+            requestAnimationFrame(animate);
+
+            // Smooth player lane transition
+            player.position.X = THREE.MathUtils.lerp(player.position.x, lanes[currentLane], 0.2);
+            player.position.x = player.position.X;
+            player.rotation.y += 0.02;
+
+            // Spawn objects periodically
+            spawnTimer++;
+            if (spawnTimer > 45) {
+                spawnObject();
+                spawnTimer = 0;
+            }
+
+            // Move objects toward player
+            for (let i = objects.length - 1; i >= 0; i--) {
+                let obj = objects[i];
+                obj.position.z += gameSpeed;
+                obj.rotation.x += 0.01;
+                obj.rotation.y += 0.02;
+
+                // Collision Detection with Player
+                if (Math.abs(obj.position.z - player.position.z) < 0.8 && obj.userData.lane === currentLane) {
+                    if (obj.userData.type === 'good') {
+                        score++;
+                        document.getElementById('score').innerText = score;
+                        if (score >= 24) { // Matches your 24 significant variables finding!
+                            endGame(true);
+                        }
+                    } else {
+                        lives--;
+                        if (lives <= 0) {
+                            endGame(false);
+                        }
+                    }
+                    scene.remove(obj);
+                    objects.splice(i, 1);
+                    continue;
+                }
+
+                // Remove objects that passed the camera
+                if (obj.position.z > 5) {
+                    scene.remove(obj);
+                    objects.splice(i, 1);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function endGame(won) {
+            gameActive = false;
+            document.getElementById('game-over').style.display = 'block';
+            if (won) {
+                document.getElementById('go-title').innerText = "Thesis Defense Passed! 🎉";
+                document.getElementById('go-message').innerText = "Congratulations! You successfully collected 24 significant AI factors influencing student design work.";
+            } else {
+                document.getElementById('go-title').innerText = "Simulation Over";
+                document.getElementById('go-message').innerText = "Over-reliance on AI impacted your creative skills. Review your variables and try again!";
+            }
+        }
+
+        function restartGame() {
+            document.getElementById('game-over').style.display = 'none';
+            score = 0;
+            lives = 3;
+            gameActive = true;
+            currentLane = 1;
+            document.getElementById('score').innerText = score;
+
+            // Clear old objects
+            objects.forEach(obj => scene.remove(obj));
+            objects = [];
+
+            animate();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
